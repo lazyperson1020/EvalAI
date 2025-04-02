@@ -89,7 +89,7 @@ jobs:
         run: coveralls --rcfile=.coveragerc
         
       - name: Setup SSH key for deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY != ''
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
@@ -97,7 +97,7 @@ jobs:
           ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
           
       - name: Run deployment scripts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY != ''
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
@@ -105,3 +105,7 @@ jobs:
           ssh-add ~/.ssh/deploy_key
           ./scripts/deployment/push.sh
           ./scripts/deployment/deploy.sh auto_deploy
+          
+      - name: Skip deployment notification
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY == ''
+        run: echo "Skipping deployment steps as SSH_PRIVATE_KEY is not configured"
