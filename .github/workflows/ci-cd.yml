@@ -2,7 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master, github-ci/cd]
+    branches: [ main, master, github-ci/cd ]
   pull_request:
     branches: [ main, master ]
 
@@ -89,23 +89,28 @@ jobs:
         run: coveralls --rcfile=.coveragerc
         
       - name: Setup SSH key for deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY != ''
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        continue-on-error: true
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+          if [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            mkdir -p ~/.ssh
+            echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+          else
+            echo "SSH_PRIVATE_KEY is not set, skipping SSH setup"
+            exit 1
+          fi
           
       - name: Run deployment scripts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY != ''
-        env:
-          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && success()
         run: |
-          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
-          ssh-add ~/.ssh/deploy_key
-          ./scripts/deployment/push.sh
-          ./scripts/deployment/deploy.sh auto_deploy
-          
-      - name: Skip deployment notification
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.SSH_PRIVATE_KEY == ''
-        run: echo "Skipping deployment steps as SSH_PRIVATE_KEY is not configured"
+          if [ -f ~/.ssh/deploy_key ]; then
+            export SSH_AUTH_SOCK=/tmp/ssh_agent.sock
+            ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+            ssh-add ~/.ssh/deploy_key
+            ./scripts/deployment/push.sh
+            ./scripts/deployment/deploy.sh auto_deploy
+          else
+            echo "SSH key not set up, skipping deployment"
+          fi
