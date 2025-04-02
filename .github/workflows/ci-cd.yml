@@ -102,9 +102,12 @@ jobs:
         uses: codecov/codecov-action@v3
         
       - name: Coveralls
+        continue-on-error: true
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-        run: coveralls --rcfile=.coveragerc
+        run: |
+          echo "Attempting to submit coverage to Coveralls..."
+          coveralls --rcfile=.coveragerc || echo "Coveralls submission failed, but continuing workflow"
         
       - name: Setup SSH key for deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
