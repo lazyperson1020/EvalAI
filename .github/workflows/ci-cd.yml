@@ -63,11 +63,20 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose --version
       
-      - name: Setup display for browser tests
-        run: |
-          export DISPLAY=:99
-          sudo apt-get install -y xvfb
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+      # - name: Setup display for browser tests
+      #   run: |
+      #     export DISPLAY=:99
+      #     sudo apt-get install -y xvfb
+      #     Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+      - name: Install xvfb
+        run: sudo apt-get install -y xvfb
+
+      - name: Start virtual display
+        run: Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Set display variable
+        run: echo "DISPLAY=:99" >> $GITHUB_ENV
+
           
       - name: Run frontend tests
         run: docker-compose run nodejs bash -c "gulp dev && karma start --single-run && gulp staging"
@@ -109,19 +118,29 @@ jobs:
           echo "Attempting to submit coverage to Coveralls..."
           coveralls --rcfile=.coveragerc || echo "Coveralls submission failed, but continuing workflow"
         
-      - name: Setup SSH key for deployment
+      # - name: Setup SSH key for deployment
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      #   continue-on-error: true
+      #   run: |
+      #     if [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+      #       mkdir -p ~/.ssh
+      #       echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+      #       chmod 600 ~/.ssh/deploy_key
+      #       ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+      #     else
+      #       echo "SSH_PRIVATE_KEY is not set, skipping SSH setup"
+      #       exit 1
+      #     fi
+      - name: Setup SSH for deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        continue-on-error: true
         run: |
-          if [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
-            mkdir -p ~/.ssh
-            echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-            chmod 600 ~/.ssh/deploy_key
-            ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-          else
-            echo "SSH_PRIVATE_KEY is not set, skipping SSH setup"
-            exit 1
-          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
           
       - name: Run deployment scripts
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && success()
